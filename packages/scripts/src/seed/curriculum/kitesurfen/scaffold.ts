@@ -10,11 +10,7 @@ import {
   programHandle,
   programTitle,
 } from "./constants.js";
-import { getOrCreateCachedItem, type GetOrCreateEntity } from "./get-or-create.js";
-
-function asEntity(entity: object): GetOrCreateEntity {
-  return entity as GetOrCreateEntity;
-}
+import { asEntity, getOrCreateCachedItem } from "./get-or-create.js";
 
 export async function scaffoldKitesurfen(): Promise<{
   disciplineId: string;

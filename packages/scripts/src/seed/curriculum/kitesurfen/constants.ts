@@ -6,7 +6,7 @@ export const COURSE_TITLE = "Kitesurfen Volwassenen";
 
 export const CATEGORY_HANDLE = "volwassenen";
 
-export const REVISION = "202506";
+export const REVISION = "202606";
 
 export const NIVEAU_SUFFIXES = ["1", "2", "3", "4", "a", "b"] as const;
 export type NiveauSuffix = (typeof NIVEAU_SUFFIXES)[number];

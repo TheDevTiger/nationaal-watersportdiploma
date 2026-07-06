@@ -1,6 +1,7 @@
 import { Course, Curriculum } from "@nawadi/core";
 import slugify from "@sindresorhus/slugify";
 import { REVISION } from "./constants.js";
+import { asEntity, getOrCreateCachedItem } from "./get-or-create.js";
 import type { NormalizedRow } from "./parse-xlsx.js";
 
 const curriculumCache = new Map<string, Promise<string>>();
@@ -46,48 +47,38 @@ function nextCompetencyWeight(programId: string, competencyHandle: string): numb
   return next;
 }
 
-async function getOrCreateModule(
+function getOrCreateModule(
   moduleTitle: string,
   programId: string,
 ): Promise<string> {
   const moduleHandle = slugify(moduleTitle);
-  const weight = nextModuleWeight(programId, moduleHandle);
 
-  const existing = await Course.Module.fromHandle(moduleHandle);
-  if (existing) {
-    return existing.id;
-  }
-
-  const created = await Course.Module.create({
-    handle: moduleHandle,
-    title: moduleTitle,
-    weight,
-  });
-
-  return created.id;
+  return getOrCreateCachedItem(
+    asEntity(Course.Module),
+    moduleHandle,
+    moduleTitle,
+    `module-${moduleHandle}`,
+    () => ({ weight: nextModuleWeight(programId, moduleHandle) }),
+  );
 }
 
-async function getOrCreateCompetency(
+function getOrCreateCompetency(
   competentieTitle: string,
   moduleTitle: string,
   programId: string,
 ): Promise<string> {
   const competencyHandle = slugify(competentieTitle);
-  const weight = nextCompetencyWeight(programId, competencyHandle);
 
-  const existing = await Course.Competency.fromHandle(competencyHandle);
-  if (existing) {
-    return existing.id;
-  }
-
-  const created = await Course.Competency.create({
-    handle: competencyHandle,
-    title: competentieTitle,
-    type: moduleTitle.startsWith("Theorie") ? "knowledge" : "skill",
-    weight,
-  });
-
-  return created.id;
+  return getOrCreateCachedItem(
+    asEntity(Course.Competency),
+    competencyHandle,
+    competentieTitle,
+    `competency-${competencyHandle}`,
+    () => ({
+      type: moduleTitle.startsWith("Theorie") ? "knowledge" : "skill",
+      weight: nextCompetencyWeight(programId, competencyHandle),
+    }),
+  );
 }
 
 export async function processRow(

@@ -7,7 +7,6 @@ import "dotenv/config";
 import assert from "node:assert";
 import fs from "node:fs";
 import path from "node:path";
-import { fileURLToPath } from "node:url";
 import pkg from "xlsx";
 import { resetDedupeCache } from "./seed/curriculum/kitesurfen/get-or-create.js";
 import {
@@ -18,24 +17,24 @@ import {
   processRow,
   resetProcessRowState,
 } from "./seed/curriculum/kitesurfen/process-row.js";
+import { replaceKitesurfenRevision } from "./seed/curriculum/kitesurfen/replace-revision.js";
 import { scaffoldKitesurfen } from "./seed/curriculum/kitesurfen/scaffold.js";
 
 const { read, utils } = pkg;
 
-const SCRIPT_DIR = path.dirname(fileURLToPath(import.meta.url));
+const USAGE =
+  "Usage: seed-kitesurfen <path-to-file.xlsx> [--dry-run] [--replace-revision]\n" +
+  "Example: pnpm --filter @nawadi/scripts seed-kitesurfen -- \"C:\\path\\kitesurfen.xlsx\" --replace-revision";
 
-/** Bundled brondbestand next to the kitesurfen seed modules. */
-export const DEFAULT_XLSX_PATH = path.join(
-  SCRIPT_DIR,
-  "seed/curriculum/kitesurfen/kitesurfen diplomalijn 202606.xlsx",
-);
+function normalizePathInput(input: string): string {
+  return input.trim().replace(/^["']|["']$/g, "");
+}
 
 function resolveXlsxPath(input: string): string {
+  const normalized = normalizePathInput(input);
   const candidates = [
-    path.resolve(input),
-    path.resolve(process.cwd(), input),
-    path.resolve(process.cwd(), "..", "..", input),
-    path.resolve(SCRIPT_DIR, input),
+    path.resolve(normalized),
+    path.resolve(process.cwd(), normalized),
   ];
 
   for (const candidate of candidates) {
@@ -44,52 +43,52 @@ function resolveXlsxPath(input: string): string {
     }
   }
 
-  return path.resolve(input);
+  return path.resolve(normalized);
 }
 
-function parseArgs(argv: string[]): { xlsxPath: string; dryRun: boolean } {
-  const args = argv.slice(2);
-  let xlsxPath = "";
+function parseArgs(argv: string[]): {
+  xlsxPath: string;
+  dryRun: boolean;
+  replaceRevision: boolean;
+} {
+  const args = argv.slice(2).filter((arg) => arg !== "--");
+  let xlsxPath: string | null = null;
   let dryRun = false;
+  let replaceRevision = false;
 
-  for (let i = 0; i < args.length; i++) {
-    const arg = args[i] ?? "";
-    if (arg === "--") {
-      continue;
-    }
+  for (const arg of args) {
     if (arg === "--dry-run") {
       dryRun = true;
       continue;
     }
-    if (arg === "--xlsx") {
-      const next = args[i + 1];
-      if (!next) {
-        throw new Error("--xlsx requires a file path");
-      }
-      xlsxPath = next;
-      i++;
+    if (arg === "--replace-revision") {
+      replaceRevision = true;
       continue;
     }
-    if (arg && !arg.startsWith("--") && !xlsxPath) {
-      xlsxPath = arg;
+    if (arg.startsWith("--")) {
+      throw new Error(`Unknown option: ${arg}\n${USAGE}`);
     }
+    if (!xlsxPath) {
+      xlsxPath = arg;
+      continue;
+    }
+    throw new Error(`Unexpected argument: ${arg}\n${USAGE}`);
   }
 
   if (!xlsxPath) {
-    xlsxPath = DEFAULT_XLSX_PATH;
+    throw new Error(USAGE);
   }
 
-  return { xlsxPath: resolveXlsxPath(xlsxPath), dryRun };
+  if (!xlsxPath.toLowerCase().endsWith(".xlsx")) {
+    throw new Error("File must be an .xlsx file");
+  }
+
+  return { xlsxPath: resolveXlsxPath(xlsxPath), dryRun, replaceRevision };
 }
 
 function loadRows(xlsxPath: string): ReturnType<typeof parseWideMatrix> {
   if (!fs.existsSync(xlsxPath)) {
-    throw new Error(
-      `XLSX file not found: ${xlsxPath}\n` +
-        `Tip: pnpm runs from packages/scripts — use a path relative to that folder, e.g.\n` +
-        `  src/seed/curriculum/kitesurfen/kitesurfen diplomalijn 202606.xlsx\n` +
-        `Or omit --xlsx to use the bundled file.`,
-    );
+    throw new Error(`XLSX file not found: ${xlsxPath}`);
   }
 
   const workbook = read(fs.readFileSync(xlsxPath), { type: "buffer" });
@@ -109,12 +108,21 @@ function loadRows(xlsxPath: string): ReturnType<typeof parseWideMatrix> {
 
 async function importToDatabase(
   rows: ReturnType<typeof parseWideMatrix>,
+  replaceRevision: boolean,
 ): Promise<void> {
   resetDedupeCache();
   resetProcessRowState();
 
   const { programIds } = await scaffoldKitesurfen();
   console.log("Scaffold ready (discipline, course, programs).");
+
+  if (replaceRevision) {
+    const cleared = await replaceKitesurfenRevision(programIds);
+    console.log(
+      `Cleared revision ${cleared.curriculumCount} curriculum(s): ` +
+        `${cleared.competenciesRemoved} eisen, ${cleared.modulesRemoved} module links removed.`,
+    );
+  }
 
   for (const [index, row] of rows.entries()) {
     try {
@@ -129,14 +137,20 @@ async function importToDatabase(
 }
 
 async function run(): Promise<void> {
-  const { xlsxPath, dryRun } = parseArgs(process.argv);
+  const { xlsxPath, dryRun, replaceRevision } = parseArgs(process.argv);
+
   const rows = loadRows(xlsxPath);
   const counts = summarizeRows(rows);
 
-  console.log(`Parsed ${rows.length} eisen from ${path.basename(xlsxPath)}`);
+  console.log(`Parsed ${rows.length} eisen from ${xlsxPath}`);
   console.log("Per niveau:", counts);
 
   if (dryRun) {
+    if (replaceRevision) {
+      console.log(
+        "Note: --replace-revision is ignored in dry-run mode (no database changes).",
+      );
+    }
     console.log("Dry run — no database changes.");
     return;
   }
@@ -167,7 +181,7 @@ async function run(): Promise<void> {
         },
         async () => {
           await withTransaction(async () => {
-            await importToDatabase(rows);
+            await importToDatabase(rows, replaceRevision);
           });
         },
       ),

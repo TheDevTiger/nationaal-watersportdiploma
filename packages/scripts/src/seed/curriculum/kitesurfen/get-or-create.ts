@@ -7,12 +7,16 @@ export type GetOrCreateEntity = {
   create: (opts: object) => Promise<{ id: string }>;
 };
 
+export function asEntity(entity: object): GetOrCreateEntity {
+  return entity as GetOrCreateEntity;
+}
+
 export async function getOrCreateCachedItem(
   entityType: GetOrCreateEntity,
   handle: string,
   title: string,
   cacheKey: string,
-  extraOpts: object = {},
+  extraOpts: object | (() => object) = {},
 ): Promise<string> {
   let promise = dedupeCache.get(cacheKey);
   if (!promise) {
@@ -21,10 +25,13 @@ export async function getOrCreateCachedItem(
         return item.id;
       }
 
+      const resolvedExtraOpts =
+        typeof extraOpts === "function" ? extraOpts() : extraOpts;
+
       const created = await entityType.create({
         handle,
         title,
-        ...extraOpts,
+        ...resolvedExtraOpts,
       });
 
       return created.id;

@@ -7,7 +7,7 @@ export async function register() {
       return;
     }
 
-    await import("./instrumentation/instrumentation.node.ts");
+    //await import("./instrumentation/instrumentation.node.ts");
     return;
   }
 

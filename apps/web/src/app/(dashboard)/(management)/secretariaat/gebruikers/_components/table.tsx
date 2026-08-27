@@ -136,7 +136,7 @@ function RowActions({ person }: { person: Person }) {
     onSuccess: () => {
       toast.success("Impersonatie gestart.");
       closeImpersonationDialog();
-      router.push("/");
+      router.push(`/profiel/${person.handle}`);
       router.refresh();
     },
     onError: ({ error }) => {

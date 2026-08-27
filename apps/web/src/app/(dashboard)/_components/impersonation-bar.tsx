@@ -2,6 +2,7 @@
 
 import { UserIcon, XMarkIcon } from "@heroicons/react/20/solid";
 import { useAction } from "next-safe-action/hooks";
+import { useRouter } from "next/navigation";
 import { useState, useTransition } from "react";
 import { toast } from "sonner";
 import {
@@ -24,12 +25,18 @@ export function ImpersonationBar({
   isImpersonating,
   impersonatedUser,
 }: ImpersonationBarProps) {
+  const router = useRouter();
   const [userId, setUserId] = useState("");
   const [isSearching, setIsSearching] = useState(false);
   const [isPending, startTransition] = useTransition();
 
   const startAction = useAction(startImpersonationAction);
-  const stopAction = useAction(stopImpersonationAction);
+  const stopAction = useAction(stopImpersonationAction, {
+    onSuccess: () => {
+      router.push("/secretariaat/gebruikers");
+      router.refresh();
+    },
+  });
 
   const handleStartImpersonation = () => {
     if (!userId.trim()) {

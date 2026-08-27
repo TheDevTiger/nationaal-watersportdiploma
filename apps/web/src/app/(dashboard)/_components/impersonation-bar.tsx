@@ -2,7 +2,6 @@
 
 import { UserIcon, XMarkIcon } from "@heroicons/react/20/solid";
 import { useAction } from "next-safe-action/hooks";
-import { useRouter } from "next/navigation";
 import { useState, useTransition } from "react";
 import { toast } from "sonner";
 import {
@@ -25,18 +24,15 @@ export function ImpersonationBar({
   isImpersonating,
   impersonatedUser,
 }: ImpersonationBarProps) {
-  const router = useRouter();
   const [userId, setUserId] = useState("");
   const [isSearching, setIsSearching] = useState(false);
   const [isPending, startTransition] = useTransition();
 
   const startAction = useAction(startImpersonationAction);
-  const stopAction = useAction(stopImpersonationAction, {
-    onSuccess: () => {
-      router.push("/secretariaat/gebruikers");
-      router.refresh();
-    },
-  });
+  // No onSuccess: stopImpersonationAction redirects to
+  // /secretariaat/gebruikers on success, so this component unmounts
+  // before it could fire.
+  const stopAction = useAction(stopImpersonationAction);
 
   const handleStartImpersonation = () => {
     if (!userId.trim()) {
